@@ -1,15 +1,13 @@
 ﻿import os
 import re
 import sys
+import shutil
 
-# Список допустимых символов
 CHARS = [str(i) for i in range(10)] + [chr(c) for c in range(ord('a'), ord('z')+1)]
-EXT = ".htm"
 REDIR_RE = re.compile(r'url=([^"]+)', re.IGNORECASE)
 
-def next_code(existing):
-    """Вычисляет следующий свободный 2-символьный код."""
-    used = set(f[:-4] for f in existing if len(f) == 6 and f.endswith(EXT))
+def next_code(existing_dirs):
+    used = set(existing_dirs)
     for c1 in CHARS:
         for c2 in CHARS:
             code = c1 + c2
@@ -18,10 +16,9 @@ def next_code(existing):
     print("Свободных кодов не осталось!")
     sys.exit(1)
 
-def read_redirect(filepath):
-    """Читает длинную ссылку из meta-редиректа html."""
+def read_redirect(path):
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(os.path.join(path, "index.html"), "r", encoding="utf-8") as f:
             content = f.read()
         m = REDIR_RE.search(content)
         if m:
@@ -45,14 +42,11 @@ def make_html(url):
 """
 
 def scan_links():
-    """Сканирует директорию и возвращает [(код, filename, url)]"""
-    files = [f for f in os.listdir() if f.endswith(EXT) and len(f) == 6]
+    dirs = [d for d in os.listdir() if os.path.isdir(d) and len(d) == 2 and all(c in CHARS for c in d)]
     links = []
-    for f in files:
-        code = f[:-4]
-        url = read_redirect(f)
-        links.append((code, f, url))
-    # сортировка по коду
+    for d in dirs:
+        url = read_redirect(d)
+        links.append((d, os.path.join(d, "index.html"), url))
     links.sort(key=lambda x: (CHARS.index(x[0][0]), CHARS.index(x[0][1])))
     return links
 
@@ -61,8 +55,8 @@ def list_links(links):
     print("-" * 64)
     print(f"{'№':<4} {'Код':<6} {'Длинная ссылка'}")
     print("-" * 64)
-    for i, (code, fname, url) in enumerate(links, 1):
-        print(f"{i:<4} {fname:<6} {url}")
+    for i, (code, _, url) in enumerate(links, 1):
+        print(f"{i:<4} {code:<6} {url}")
     print("-" * 64)
 
 def input_code(prompt, used=None):
@@ -78,12 +72,13 @@ def input_code(prompt, used=None):
 def create_link():
     links = scan_links()
     codes = [l[0] for l in links]
-    new_code = next_code([l[1] for l in links])
-    url = input(f"Введите длинную ссылку для {new_code}{EXT}: ").strip()
-    fname = new_code + EXT
-    with open(fname, "w", encoding="utf-8") as f:
+    new_code = next_code(codes)
+    url = input(f"Введите длинную ссылку для {new_code}/index.html: ").strip()
+    dir_path = new_code
+    os.makedirs(dir_path, exist_ok=True)
+    with open(os.path.join(dir_path, "index.html"), "w", encoding="utf-8") as f:
         f.write(make_html(url))
-    print(f"Создано: {fname} → {url}")
+    print(f"Создано: {dir_path}/index.html → {url}")
 
 def edit_link():
     links = scan_links()
@@ -100,33 +95,31 @@ def edit_link():
         print("Введите число.")
         return
 
-    old_code, old_fname, old_url = links[idx]
+    old_code, old_path, old_url = links[idx]
     print(f"Текущий код: {old_code}, ссылка: {old_url}")
-    # Новое имя файла
     codes_in_use = set(l[0] for l in links if l[0] != old_code)
-    new_code = input_code(f"Новый код (Enter — не менять): ", used=codes_in_use) or old_code
-    # Новая длинная ссылка
-    new_url = input(f"Новая длинная ссылка (Enter — не менять): ").strip() or old_url
+    new_code = input_code("Новый код (Enter — не менять): ", used=codes_in_use) or old_code
+    new_url = input("Новая длинная ссылка (Enter — не менять): ").strip() or old_url
 
-    # Проверить, надо ли переименовывать файл
-    new_fname = new_code + EXT
-    # Записать новый файл
-    with open(new_fname, "w", encoding="utf-8") as f:
+    # Переименовать каталог, если код изменился
+    if new_code != old_code:
+        new_dir = new_code
+        if os.path.exists(new_dir):
+            print("Целевая папка уже существует.")
+            return
+        os.rename(old_code, new_code)
+    else:
+        new_dir = old_code
+
+    with open(os.path.join(new_dir, "index.html"), "w", encoding="utf-8") as f:
         f.write(make_html(new_url))
-    # Удалить старый файл, если имя изменилось
-    if new_fname != old_fname:
-        try:
-            os.remove(old_fname)
-        except Exception:
-            print("Не удалось удалить старый файл (возможно, уже удалён).")
-    print(f"Ссылка обновлена: {new_fname} → {new_url}")
+    print(f"Ссылка обновлена: {new_dir}/index.html → {new_url}")
 
 def export_links(filepath="links.txt"):
-    """Сохраняет все текущие ссылки в текстовый файл."""
     links = scan_links()
     with open(filepath, "w", encoding="utf-8") as f:
         for code, _, url in links:
-            f.write(f"s.lifebalance.ru/{code}{EXT} -> {url}\n")
+            f.write(f"s.lifebalance.ru/{code}/ -> {url}\n")
     print(f"Актуальные ссылки сохранены в {filepath}")
 
 def main():
