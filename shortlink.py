@@ -121,6 +121,14 @@ def edit_link():
             print("Не удалось удалить старый файл (возможно, уже удалён).")
     print(f"Ссылка обновлена: {new_fname} → {new_url}")
 
+def export_links(filepath="links.txt"):
+    """Сохраняет все текущие ссылки в текстовый файл."""
+    links = scan_links()
+    with open(filepath, "w", encoding="utf-8") as f:
+        for code, _, url in links:
+            f.write(f"s.lifebalance.ru/{code}{EXT} -> {url}\n")
+    print(f"Актуальные ссылки сохранены в {filepath}")
+
 def main():
     while True:
         print("\nМеню:")
@@ -137,6 +145,7 @@ def main():
             links = scan_links()
             list_links(links)
         elif cmd == '0':
+            export_links()
             print("Выход.")
             break
         else:
